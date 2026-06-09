@@ -42,10 +42,14 @@ Với nhà cung cấp tương thích khác, thay `API_BASE_URL`, `PROMPT_ENDPOIN
 API_AUTH_HEADER=Authorization
 API_AUTH_PREFIX=Bearer
 API_TIMEOUT_SECONDS=180
+API_MAX_RETRIES=2
+API_RETRY_BACKOFF_SECONDS=2
 ```
 
 Client tự kiểm tra status code, header, content type và có thể đọc ảnh từ binary,
 URL, base64, data URL, JSON lồng nhau hoặc danh sách ảnh.
+Các lỗi tạm thời `429`, `502`, `503`, `504` được tự động thử lại với thời gian chờ
+tăng dần; header `Retry-After` của nhà cung cấp được ưu tiên nếu có.
 
 ## Dữ liệu cục bộ
 

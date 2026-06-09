@@ -38,6 +38,8 @@ class SettingsManager:
             auth_header=str(env.get("API_AUTH_HEADER") or "Authorization"),
             auth_prefix=str(env.get("API_AUTH_PREFIX") or "Bearer"),
             timeout_seconds=int(env.get("API_TIMEOUT_SECONDS") or 180),
+            max_retries=max(0, int(env.get("API_MAX_RETRIES") or 2)),
+            retry_backoff_seconds=max(0.0, float(env.get("API_RETRY_BACKOFF_SECONDS") or 2)),
         )
 
     def save_api_key(self, api_key: str) -> None:

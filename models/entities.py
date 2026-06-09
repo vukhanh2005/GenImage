@@ -15,6 +15,8 @@ class ApiConfig:
     auth_header: str = "Authorization"
     auth_prefix: str = "Bearer"
     timeout_seconds: int = 180
+    max_retries: int = 2
+    retry_backoff_seconds: float = 2.0
 
     def endpoint_url(self, endpoint: str) -> str:
         return f"{self.base_url.rstrip('/')}/{endpoint.lstrip('/')}"
