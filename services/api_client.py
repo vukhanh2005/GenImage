@@ -206,12 +206,13 @@ class ApiClient:
         if progress:
             progress("Đang nhận dữ liệu...")
         if not response.ok:
-            message = self._extract_error(json_data, response.text)
-            if response.status_code == 429:
-                message = self._format_rate_limit_error(message)
+            raw_message = self._extract_error(json_data, response.text)
+            reason = self._provider_error_reason(response.status_code, raw_message)
+            message = self._format_provider_error(response.status_code, raw_message)
             raise ApiError(
                 f"API trả về lỗi {response.status_code}: {message}",
                 status_code=response.status_code,
+                reason=reason,
             )
         return ApiResponse(
             status_code=response.status_code,
@@ -243,16 +244,31 @@ class ApiClient:
         return cleaned[:500] if cleaned else "Phản hồi không có nội dung lỗi."
 
     @staticmethod
-    def _format_rate_limit_error(message: str) -> str:
-        overload_markers = ("上游负载已饱和", "upstream", "overload", "saturated")
-        if any(marker in message.lower() for marker in overload_markers):
+    def _format_provider_error(status_code: int, message: str) -> str:
+        if ApiClient._provider_error_reason(status_code, message) == "model_unavailable":
             request_id = re.search(r"request id\s*:\s*([^)]+)", message, re.IGNORECASE)
             suffix = f" Request ID: {request_id.group(1).strip()}." if request_id else ""
             return (
-                "Máy chủ của nhà cung cấp đang quá tải. Ứng dụng đã tự thử lại nhưng "
-                f"vẫn chưa xử lý được; vui lòng chờ một lúc rồi thử lại.{suffix}"
+                "Nhà cung cấp hiện không có channel khả dụng cho model đã chọn. "
+                f"Hãy chọn model khác (khuyến nghị gpt-image-2) hoặc thử lại sau.{suffix}"
             )
         return message
+
+    @staticmethod
+    def _provider_error_reason(status_code: int, message: str) -> str | None:
+        normalized = message.lower()
+        unavailable_markers = (
+            "上游负载已饱和",
+            "上游已饱和",
+            "no available channel",
+            "upstream overloaded",
+            "upstream saturated",
+        )
+        if status_code in {429, 503} and any(
+            marker in normalized for marker in unavailable_markers
+        ):
+            return "model_unavailable"
+        return None
 
     def download(self, url: str) -> ApiResponse:
         headers = {"Accept": "image/*, application/octet-stream"}

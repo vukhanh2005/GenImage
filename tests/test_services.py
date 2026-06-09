@@ -7,6 +7,7 @@ from typing import Any
 
 from models import ApiConfig
 from services.api_client import ApiResponse
+from services.exceptions import ApiError
 from services.image_service import ImageService
 from services.prompt_service import PromptService
 from services.response_parser import ResponseParser
@@ -41,6 +42,23 @@ class RecordingClient:
         self.multipart_calls.append((endpoint, fields, file_field, file_path))
         self.last_options = kwargs
         return self.response
+
+
+class FallbackClient(RecordingClient):
+    def __init__(self, outcomes: list[ApiResponse | Exception]) -> None:
+        super().__init__(outcomes[-1] if isinstance(outcomes[-1], ApiResponse) else ApiResponse(
+            200, {}, "application/json", b"{}", {}
+        ))
+        self.outcomes = outcomes
+
+    def post_json(
+        self, endpoint: str, payload: dict[str, Any], progress=None, **kwargs: Any
+    ) -> ApiResponse:
+        self.calls.append((endpoint, payload))
+        outcome = self.outcomes.pop(0)
+        if isinstance(outcome, Exception):
+            raise outcome
+        return outcome
 
 
 class ServiceTests(unittest.TestCase):
@@ -130,6 +148,63 @@ class ServiceTests(unittest.TestCase):
         self.assertEqual(len(images), 1)
         self.assertEqual(client.last_options["max_retries"], 0)
         self.assertTrue(client.last_options["billing_sensitive"])
+
+    def test_image_service_falls_back_to_next_model(self) -> None:
+        import base64
+        import io
+        from unittest.mock import Mock
+
+        from PIL import Image
+
+        stream = io.BytesIO()
+        Image.new("RGB", (4, 4), "blue").save(stream, "PNG")
+        encoded = base64.b64encode(stream.getvalue()).decode()
+        success = ApiResponse(
+            200,
+            {},
+            "application/json",
+            b"{}",
+            {"data": [{"b64_json": encoded}]},
+        )
+        client = FallbackClient(
+            [
+                ApiError("unavailable", status_code=503, reason="model_unavailable"),
+                success,
+            ]
+        )
+        client.config.image_models = ("gpt-image-2", "gpt-image-1.5")
+        progress = Mock()
+
+        with tempfile.TemporaryDirectory() as folder:
+            parser = ResponseParser(client, Path(folder))  # type: ignore[arg-type]
+            service = ImageService(client, parser)  # type: ignore[arg-type]
+            images = service.generate(
+                "prompt",
+                "gpt-image-2",
+                "1024x1024",
+                1,
+                progress,
+            )
+
+        self.assertEqual(
+            [payload["model"] for _, payload in client.calls],
+            ["gpt-image-2", "gpt-image-1.5"],
+        )
+        progress.assert_any_call(
+            "Có lỗi xảy ra. Đang đổi sang model gpt-image-1.5"
+        )
+        self.assertEqual(images[0].metadata["model"], "gpt-image-1.5")
+
+    def test_image_service_does_not_fallback_on_other_errors(self) -> None:
+        client = FallbackClient([ApiError("moderation blocked", status_code=429)])
+        client.config.image_models = ("gpt-image-2", "gpt-image-1.5")
+        parser = ResponseParser(client)  # type: ignore[arg-type]
+        service = ImageService(client, parser)  # type: ignore[arg-type]
+
+        with self.assertRaisesRegex(ApiError, "moderation blocked"):
+            service.generate("prompt", "gpt-image-2", "1024x1024", 1)
+
+        self.assertEqual(len(client.calls), 1)
 
 
 if __name__ == "__main__":

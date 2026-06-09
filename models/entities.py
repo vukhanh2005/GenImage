@@ -13,6 +13,7 @@ class ApiConfig:
     prompt_endpoint: str = "/responses"
     image_endpoint: str = "/images/generations"
     image_edit_endpoint: str = "/images/edits"
+    image_models: tuple[str, ...] = ("gpt-image-2", "gpt-image-1.5", "gpt-image-1-mini")
     auth_header: str = "Authorization"
     auth_prefix: str = "Bearer"
     timeout_seconds: int = 180

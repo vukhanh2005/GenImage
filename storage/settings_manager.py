@@ -29,6 +29,14 @@ class SettingsManager:
 
     def load_api_config(self) -> ApiConfig:
         env = {**dotenv_values(self.env_path), **os.environ}
+        image_models = tuple(
+            model.strip()
+            for model in str(
+                env.get("IMAGE_MODELS")
+                or "gpt-image-2,gpt-image-1.5,gpt-image-1-mini"
+            ).split(",")
+            if model.strip()
+        )
         return ApiConfig(
             api_key=str(env.get("API_KEY") or ""),
             base_url=str(env.get("API_BASE_URL") or "https://api.openai.com/v1"),
@@ -36,6 +44,7 @@ class SettingsManager:
             prompt_endpoint=str(env.get("PROMPT_ENDPOINT") or "/responses"),
             image_endpoint=str(env.get("IMAGE_ENDPOINT") or "/images/generations"),
             image_edit_endpoint=str(env.get("IMAGE_EDIT_ENDPOINT") or "/images/edits"),
+            image_models=image_models,
             auth_header=str(env.get("API_AUTH_HEADER") or "Authorization"),
             auth_prefix=str(env.get("API_AUTH_PREFIX") or "Bearer"),
             timeout_seconds=int(env.get("API_TIMEOUT_SECONDS") or 180),

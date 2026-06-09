@@ -1,7 +1,7 @@
 # AI Image Studio
 
 Ứng dụng desktop cá nhân dùng PySide6 để mở rộng prompt bằng `gpt-5.1`, tạo ảnh
-và chỉnh sửa ảnh nguồn bằng `gpt-image-1.5`.
+và chỉnh sửa ảnh nguồn bằng các model ảnh được cấu hình.
 
 ## Chế độ
 
@@ -30,6 +30,7 @@ IMAGE_API_BASE_URL=
 PROMPT_ENDPOINT=/responses
 IMAGE_ENDPOINT=/images/generations
 IMAGE_EDIT_ENDPOINT=/images/edits
+IMAGE_MODELS=gpt-image-2,gpt-image-1.5,gpt-image-1-mini
 ```
 
 Có thể sao chép cấu trúc từ `.env.example`. File `.env` đã được loại khỏi Git để

@@ -93,10 +93,37 @@ class ApiClientTests(unittest.TestCase):
         session.post.return_value = response
         client = ApiClient(ApiConfig(api_key="secret", max_retries=0), session)
 
-        with self.assertRaisesRegex(ApiError, "Máy chủ của nhà cung cấp đang quá tải") as raised:
+        with self.assertRaisesRegex(ApiError, "không có channel khả dụng") as raised:
             client.post_json("/images/generations", {"model": "test"})
 
         self.assertIn("20260609143127829295063V1Cu6u9X", str(raised.exception))
+
+    def test_translates_no_available_channel_error(self) -> None:
+        response = Mock()
+        response.status_code = 503
+        response.ok = False
+        response.headers = {"Content-Type": "application/json"}
+        response.content = (
+            b'{"error":{"message":"No available channel for model gpt-image-1.5 '
+            b'under group cheap (request id: r1)"}}'
+        )
+        response.text = response.content.decode()
+        response.json.return_value = {
+            "error": {
+                "message": (
+                    "No available channel for model gpt-image-1.5 "
+                    "under group cheap (request id: r1)"
+                )
+            }
+        }
+        session = Mock()
+        session.post.return_value = response
+        client = ApiClient(ApiConfig(api_key="secret", max_retries=0), session)
+
+        with self.assertRaisesRegex(ApiError, "khuyến nghị gpt-image-2") as raised:
+            client.post_json("/images/generations", {"model": "gpt-image-1.5"})
+
+        self.assertEqual(raised.exception.reason, "model_unavailable")
 
     @patch("services.api_client.time.sleep")
     def test_does_not_retry_insufficient_quota(self, sleep: Mock) -> None:

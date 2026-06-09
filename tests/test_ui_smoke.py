@@ -26,7 +26,7 @@ class UiSmokeTests(unittest.TestCase):
                 SettingsManager(root / "settings.json", root / ".env"),
                 HistoryManager(root / "history.json"),
             )
-            self.assertEqual(window.model_combo.currentText(), "gpt-image-1.5")
+            self.assertEqual(window.model_combo.currentText(), "gpt-image-2")
             self.assertFalse(window.save_button.isEnabled())
             window.close()
 

@@ -209,7 +209,6 @@ class MainWindow(QMainWindow):
         form = QFormLayout()
         form.setSpacing(10)
         self.model_combo = QComboBox()
-        self.model_combo.addItems(["gpt-image-1.5"])
         self.size_combo = QComboBox()
         self.size_combo.addItems(["1024x1024", "1024x1536", "1536x1024"])
         self.count_combo = QComboBox()
@@ -266,6 +265,10 @@ class MainWindow(QMainWindow):
     def _load_settings(self) -> None:
         config = self.settings.load_api_config()
         self.api_key_input.setText(config.api_key)
+        self.model_combo.clear()
+        self.model_combo.addItems(list(config.image_models))
+        default_model = config.image_models[0] if config.image_models else ""
+        self.model_combo.setCurrentText(str(self.settings.get("last_model", default_model)))
         self.size_combo.setCurrentText(str(self.settings.get("last_size", "1024x1024")))
         self.count_combo.setCurrentText(str(self.settings.get("last_count", "1")))
         mode = self.settings.get("last_mode", "ai")
@@ -378,6 +381,10 @@ class MainWindow(QMainWindow):
 
     def _images_ready(self, artifacts: object) -> None:
         self.current_artifacts = list(artifacts)  # type: ignore[arg-type]
+        if self.current_artifacts:
+            actual_model = str(self.current_artifacts[0].metadata.get("model", ""))
+            if actual_model:
+                self.model_combo.setCurrentText(actual_model)
         paths = [artifact.path for artifact in self.current_artifacts]
         self.gallery.set_images(paths)
         self.image_count_label.setText(f"{len(paths)} ảnh")
@@ -386,6 +393,7 @@ class MainWindow(QMainWindow):
         self.status_label.setText("Hoàn tất")
         self.settings.set("last_size", self.size_combo.currentText())
         self.settings.set("last_count", self.count_combo.currentText())
+        self.settings.set("last_model", self.model_combo.currentText())
         if self.edit_radio.isChecked():
             mode = "edit"
         elif self.ai_radio.isChecked():
