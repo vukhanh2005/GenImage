@@ -28,7 +28,14 @@ class ImageService:
             "n": count,
             "output_format": "png",
         }
-        response = self.client.post_json(self.client.config.image_endpoint, payload, progress)
+        response = self.client.post_json(
+            self.client.config.image_endpoint,
+            payload,
+            progress,
+            base_url=self.client.config.image_base_url or None,
+            max_retries=0,
+            billing_sensitive=True,
+        )
         if progress:
             progress("Đang xử lý ảnh...")
         return self.parser.extract_images(response)
@@ -55,6 +62,9 @@ class ImageService:
             "image",
             source_image,
             progress,
+            base_url=self.client.config.image_base_url or None,
+            max_retries=0,
+            billing_sensitive=True,
         )
         if progress:
             progress("Đang xử lý ảnh đã chỉnh sửa...")

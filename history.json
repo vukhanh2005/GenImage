@@ -1,2 +1,15 @@
-[]
-
+[
+  {
+    "time": "2026-06-09T13:36:40+07:00",
+    "input_prompt": "tạo ảnh ronaldo ôm messi",
+    "generated_prompt": "",
+    "image_path": "C:\\Users\\trauv\\OneDrive\\Hình ảnh\\ai_image_20260609_133640_1.png",
+    "model": "gpt-image-1.5",
+    "size": "1024x1024",
+    "image_paths": [
+      "C:\\Users\\trauv\\OneDrive\\Hình ảnh\\ai_image_20260609_133640_1.png"
+    ],
+    "mode": "generate",
+    "source_image_path": ""
+  }
+]

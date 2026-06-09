@@ -26,6 +26,7 @@ Nhập API key trong giao diện và bấm **Lưu**, hoặc sửa `.env`:
 ```env
 API_KEY=your_key
 API_BASE_URL=https://api.openai.com/v1
+IMAGE_API_BASE_URL=
 PROMPT_ENDPOINT=/responses
 IMAGE_ENDPOINT=/images/generations
 IMAGE_EDIT_ENDPOINT=/images/edits
@@ -45,6 +46,11 @@ API_TIMEOUT_SECONDS=180
 API_MAX_RETRIES=2
 API_RETRY_BACKOFF_SECONDS=2
 ```
+
+`IMAGE_API_BASE_URL` cho phép dùng base URL riêng cho các tác vụ tạo/chỉnh ảnh.
+Với ShopAIKey nên đặt `https://direct.shopaikey.com/v1` để dùng endpoint Direct.
+Tác vụ ảnh không được tự động retry vì timeout không chứng minh tác vụ phía server
+đã thất bại; gửi lại có thể tạo tác vụ trùng và phát sinh thêm chi phí.
 
 Client tự kiểm tra status code, header, content type và có thể đọc ảnh từ binary,
 URL, base64, data URL, JSON lồng nhau hoặc danh sách ảnh.

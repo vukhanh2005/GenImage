@@ -38,8 +38,12 @@ class ApiClient:
         endpoint: str,
         payload: dict[str, Any],
         progress: Callable[[str], None] | None = None,
+        *,
+        base_url: str | None = None,
+        max_retries: int | None = None,
+        billing_sensitive: bool = False,
     ) -> ApiResponse:
-        url = self.config.endpoint_url(endpoint)
+        url = self.config.endpoint_url(endpoint, base_url)
         headers = {
             **self._auth_headers(),
             "Accept": "application/json, image/*, application/octet-stream",
@@ -48,7 +52,8 @@ class ApiClient:
         if progress:
             progress("Đang gửi yêu cầu...")
         logger.info("POST %s payload=%s", url, sanitize(payload))
-        for attempt in range(self.config.max_retries + 1):
+        retry_limit = self.config.max_retries if max_retries is None else max(0, max_retries)
+        for attempt in range(retry_limit + 1):
             started = time.perf_counter()
             try:
                 response = self.session.post(
@@ -57,10 +62,13 @@ class ApiClient:
                     json=payload,
                     timeout=(15, self.config.timeout_seconds),
                 )
+            except requests.ReadTimeout as exc:
+                logger.exception("Request timed out after %.2fs", time.perf_counter() - started)
+                raise self._timeout_error(exc, billing_sensitive) from exc
             except requests.RequestException as exc:
                 logger.exception("Request failed after %.2fs", time.perf_counter() - started)
                 raise ApiError(f"Không thể kết nối API: {exc}") from exc
-            if not self._retry_response(response, attempt, progress):
+            if not self._retry_response(response, attempt, retry_limit, progress):
                 return self._parse_response(response, started, progress)
         raise AssertionError("Retry loop ended unexpectedly")
 
@@ -71,8 +79,12 @@ class ApiClient:
         file_field: str,
         file_path: Path,
         progress: Callable[[str], None] | None = None,
+        *,
+        base_url: str | None = None,
+        max_retries: int | None = None,
+        billing_sensitive: bool = False,
     ) -> ApiResponse:
-        url = self.config.endpoint_url(endpoint)
+        url = self.config.endpoint_url(endpoint, base_url)
         headers = {
             **self._auth_headers(),
             "Accept": "application/json, image/*, application/octet-stream",
@@ -82,7 +94,8 @@ class ApiClient:
             progress("Đang tải ảnh nguồn lên...")
         logged_fields = {**fields, file_field: f"<file:{file_path.name}:{file_path.stat().st_size} bytes>"}
         logger.info("POST multipart %s fields=%s", url, sanitize(logged_fields))
-        for attempt in range(self.config.max_retries + 1):
+        retry_limit = self.config.max_retries if max_retries is None else max(0, max_retries)
+        for attempt in range(retry_limit + 1):
             started = time.perf_counter()
             try:
                 with file_path.open("rb") as stream:
@@ -95,10 +108,13 @@ class ApiClient:
                     )
             except OSError as exc:
                 raise ApiError(f"Không thể đọc ảnh nguồn: {exc}") from exc
+            except requests.ReadTimeout as exc:
+                logger.exception("Multipart request timed out after %.2fs", time.perf_counter() - started)
+                raise self._timeout_error(exc, billing_sensitive) from exc
             except requests.RequestException as exc:
                 logger.exception("Multipart request failed after %.2fs", time.perf_counter() - started)
                 raise ApiError(f"Không thể kết nối API: {exc}") from exc
-            if not self._retry_response(response, attempt, progress):
+            if not self._retry_response(response, attempt, retry_limit, progress):
                 return self._parse_response(response, started, progress)
         raise AssertionError("Retry loop ended unexpectedly")
 
@@ -106,21 +122,22 @@ class ApiClient:
         self,
         response: requests.Response,
         attempt: int,
+        retry_limit: int,
         progress: Callable[[str], None] | None,
     ) -> bool:
-        if not self._is_retryable(response) or attempt >= self.config.max_retries:
+        if not self._is_retryable(response) or attempt >= retry_limit:
             return False
         delay = self._retry_delay(response, attempt)
         logger.warning(
             "Retryable API status=%s; retry=%s/%s delay=%.2fs",
             response.status_code,
             attempt + 1,
-            self.config.max_retries,
+            retry_limit,
             delay,
         )
         if progress:
             progress(
-                f"Máy chủ đang bận, thử lại lần {attempt + 1}/{self.config.max_retries} "
+                f"Máy chủ đang bận, thử lại lần {attempt + 1}/{retry_limit} "
                 f"sau {delay:g} giây..."
             )
         time.sleep(delay)
@@ -150,6 +167,16 @@ class ApiClient:
         except ValueError:
             pass
         return min(self.config.retry_backoff_seconds * (2**attempt), 60.0)
+
+    @staticmethod
+    def _timeout_error(exc: requests.ReadTimeout, billing_sensitive: bool) -> ApiError:
+        if billing_sensitive:
+            return ApiError(
+                "Kết nối đã hết thời gian chờ nhưng tác vụ có thể vẫn đang được nhà cung cấp "
+                "xử lý và tính phí. Ứng dụng không tự gửi lại để tránh tạo tác vụ trùng. "
+                "Hãy kiểm tra lịch sử sử dụng của API trước khi thử lại."
+            )
+        return ApiError(f"API phản hồi quá thời gian chờ: {exc}")
 
     def _parse_response(
         self,
@@ -229,9 +256,13 @@ class ApiClient:
 
     def download(self, url: str) -> ApiResponse:
         headers = {"Accept": "image/*, application/octet-stream"}
-        source_host = urlparse(self.config.base_url).netloc.lower()
+        source_hosts = {
+            urlparse(base_url).netloc.lower()
+            for base_url in (self.config.base_url, self.config.image_base_url)
+            if base_url
+        }
         target_host = urlparse(url).netloc.lower()
-        if source_host and target_host == source_host:
+        if target_host in source_hosts:
             prefix = self.config.auth_prefix.strip()
             headers[self.config.auth_header] = f"{prefix} {self.config.api_key}".strip()
         try:

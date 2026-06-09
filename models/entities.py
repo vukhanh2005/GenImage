@@ -9,6 +9,7 @@ from typing import Any
 class ApiConfig:
     api_key: str
     base_url: str = "https://api.openai.com/v1"
+    image_base_url: str = ""
     prompt_endpoint: str = "/responses"
     image_endpoint: str = "/images/generations"
     image_edit_endpoint: str = "/images/edits"
@@ -18,8 +19,9 @@ class ApiConfig:
     max_retries: int = 2
     retry_backoff_seconds: float = 2.0
 
-    def endpoint_url(self, endpoint: str) -> str:
-        return f"{self.base_url.rstrip('/')}/{endpoint.lstrip('/')}"
+    def endpoint_url(self, endpoint: str, base_url: str | None = None) -> str:
+        root = base_url or self.base_url
+        return f"{root.rstrip('/')}/{endpoint.lstrip('/')}"
 
 
 @dataclass(slots=True)

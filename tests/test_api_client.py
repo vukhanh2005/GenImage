@@ -5,6 +5,8 @@ import tempfile
 from pathlib import Path
 from unittest.mock import Mock, patch
 
+import requests
+
 from models import ApiConfig
 from services.api_client import ApiClient
 from services.exceptions import ApiError
@@ -137,6 +139,71 @@ class ApiClientTests(unittest.TestCase):
         client.download("https://cdn.example.test/image.png")
         other_host_headers = session.get.call_args.kwargs["headers"]
         self.assertNotIn("Authorization", other_host_headers)
+
+    def test_download_sends_auth_to_image_base_host(self) -> None:
+        response = Mock()
+        response.status_code = 200
+        response.headers = {"Content-Type": "image/png"}
+        response.content = b"image"
+        response.raise_for_status.return_value = None
+        session = Mock()
+        session.get.return_value = response
+        client = ApiClient(
+            ApiConfig(
+                api_key="secret",
+                base_url="https://api.example.test/v1",
+                image_base_url="https://direct.example.test/v1",
+            ),
+            session,
+        )
+
+        client.download("https://direct.example.test/files/image.png")
+
+        self.assertEqual(
+            session.get.call_args.kwargs["headers"]["Authorization"],
+            "Bearer secret",
+        )
+
+    def test_uses_override_base_url(self) -> None:
+        response = Mock()
+        response.status_code = 200
+        response.ok = True
+        response.headers = {"Content-Type": "application/json"}
+        response.content = b'{"data":[]}'
+        response.text = response.content.decode()
+        response.json.return_value = {"data": []}
+        session = Mock()
+        session.post.return_value = response
+        client = ApiClient(
+            ApiConfig(api_key="secret", base_url="https://api.example.test/v1"),
+            session,
+        )
+
+        client.post_json(
+            "/images/generations",
+            {"model": "test"},
+            base_url="https://direct.example.test/v1",
+        )
+
+        self.assertEqual(
+            session.post.call_args.args[0],
+            "https://direct.example.test/v1/images/generations",
+        )
+
+    def test_billing_sensitive_timeout_is_not_retried(self) -> None:
+        session = Mock()
+        session.post.side_effect = requests.ReadTimeout("read timed out")
+        client = ApiClient(ApiConfig(api_key="secret", max_retries=2), session)
+
+        with self.assertRaisesRegex(ApiError, "không tự gửi lại"):
+            client.post_json(
+                "/images/generations",
+                {"model": "test"},
+                max_retries=0,
+                billing_sensitive=True,
+            )
+
+        self.assertEqual(session.post.call_count, 1)
 
     def test_posts_multipart_image_without_forcing_content_type(self) -> None:
         response = Mock()

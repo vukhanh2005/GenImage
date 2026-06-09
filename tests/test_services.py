@@ -19,8 +19,11 @@ class RecordingClient:
         self.calls: list[tuple[str, dict[str, Any]]] = []
         self.multipart_calls: list[tuple[str, dict[str, Any], str, Path]] = []
 
-    def post_json(self, endpoint: str, payload: dict[str, Any], progress=None) -> ApiResponse:
+    def post_json(
+        self, endpoint: str, payload: dict[str, Any], progress=None, **kwargs: Any
+    ) -> ApiResponse:
         self.calls.append((endpoint, payload))
+        self.last_options = kwargs
         return self.response
 
     def download(self, url: str) -> ApiResponse:
@@ -33,8 +36,10 @@ class RecordingClient:
         file_field: str,
         file_path: Path,
         progress=None,
+        **kwargs: Any,
     ) -> ApiResponse:
         self.multipart_calls.append((endpoint, fields, file_field, file_path))
+        self.last_options = kwargs
         return self.response
 
 
@@ -79,6 +84,7 @@ class ServiceTests(unittest.TestCase):
         client = RecordingClient(
             ApiResponse(200, {}, "application/json", b"{}", {"data": [{"b64_json": encoded}]})
         )
+        client.config.image_base_url = "https://direct.example.test/v1"
         with tempfile.TemporaryDirectory() as folder:
             parser = ResponseParser(client, Path(folder))  # type: ignore[arg-type]
             service = ImageService(client, parser)  # type: ignore[arg-type]
@@ -87,6 +93,9 @@ class ServiceTests(unittest.TestCase):
         self.assertEqual(payload["n"], 2)
         self.assertEqual(payload["size"], "1024x1536")
         self.assertEqual(len(images), 1)
+        self.assertEqual(client.last_options["base_url"], "https://direct.example.test/v1")
+        self.assertEqual(client.last_options["max_retries"], 0)
+        self.assertTrue(client.last_options["billing_sensitive"])
 
     def test_image_service_builds_edit_multipart_payload(self) -> None:
         import base64
@@ -119,6 +128,8 @@ class ServiceTests(unittest.TestCase):
         self.assertEqual(fields["prompt"], "Change only the apple color")
         self.assertEqual(fields["n"], "1")
         self.assertEqual(len(images), 1)
+        self.assertEqual(client.last_options["max_retries"], 0)
+        self.assertTrue(client.last_options["billing_sensitive"])
 
 
 if __name__ == "__main__":

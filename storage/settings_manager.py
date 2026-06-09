@@ -32,6 +32,7 @@ class SettingsManager:
         return ApiConfig(
             api_key=str(env.get("API_KEY") or ""),
             base_url=str(env.get("API_BASE_URL") or "https://api.openai.com/v1"),
+            image_base_url=str(env.get("IMAGE_API_BASE_URL") or ""),
             prompt_endpoint=str(env.get("PROMPT_ENDPOINT") or "/responses"),
             image_endpoint=str(env.get("IMAGE_ENDPOINT") or "/images/generations"),
             image_edit_endpoint=str(env.get("IMAGE_EDIT_ENDPOINT") or "/images/edits"),
